@@ -79,8 +79,8 @@
     <button class="refresh-btn" id="refreshBtn">Обновить</button>
 
     <script>
-        // Используем прокси для обхода CORS (для демо)
-        const PROXY_URL = "https://cors-anywhere.herokuapp.com/";
+        // Используем прокси для обхода CORS (может потребоваться активация)
+        const PROXY_URL = "https://api.allorigins.win/raw?url=";
         const TARGET_URL = "https://transphoto.org/voting.php?show=results";
 
         async function fetchWinners() {
@@ -88,54 +88,48 @@
             container.innerHTML = '<div class="loading">Загрузка данных...</div>';
             
             try {
-                const response = await fetch(PROXY_URL + TARGET_URL);
+                const response = await fetch(PROXY_URL + encodeURIComponent(TARGET_URL));
                 const html = await response.text();
                 
                 // Парсим HTML с помощью DOMParser
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, "text/html");
                 
-                // Находим таблицу с результатами
-                const table = doc.querySelector(".voting_results");
-                if (!table) throw new Error("Не найдены результаты голосования");
+                // Находим все ссылки на фотографии в таблице результатов
+                const photoLinks = Array.from(doc.querySelectorAll("a[href^='/photo/']"))
+                    .filter(a => a.querySelector('img'))
+                    .slice(0, 3); // Берем первые 3 фото
                 
-                // Извлекаем топ-3 фото
-                const rows = table.querySelectorAll("tr:not(:first-child)");
-                const winners = [];
-                
-                for (let i = 0; i < Math.min(3, rows.length); i++) {
-                    const row = rows[i];
-                    const img = row.querySelector("img");
-                    const link = row.querySelector("a");
-                    const votes = row.querySelector("td:nth-child(3)");
-                    
-                    if (!img || !link || !votes) continue;
-                    
-                    winners.push({
-                        imageUrl: img.src,
-                        title: link.textContent.trim(),
-                        author: row.querySelector("td:nth-child(2)").textContent.trim(),
-                        votes: votes.textContent.trim(),
-                        link: link.href
-                    });
+                if (photoLinks.length === 0) {
+                    throw new Error("Не найдены фотографии победителей");
                 }
+                
+                const winners = photoLinks.map(link => {
+                    const img = link.querySelector('img');
+                    const row = link.closest('tr');
+                    const votes = row?.querySelector('td:nth-child(3)')?.textContent?.trim() || 'N/A';
+                    const author = row?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Неизвестен';
+                    
+                    return {
+                        imageUrl: img.src.startsWith('http') ? img.src : `https://transphoto.org${img.src}`,
+                        title: img.alt || 'Фотография транспорта',
+                        author: author,
+                        votes: votes,
+                        link: `https://transphoto.org${link.getAttribute('href')}`
+                    };
+                });
                 
                 // Отрисовываем победителей
                 renderWinners(winners);
             } catch (error) {
                 console.error("Ошибка:", error);
-                container.innerHTML = `<div class="error">Ошибка загрузки данных. Попробуйте позже.</div>`;
+                container.innerHTML = `<div class="error">Ошибка загрузки данных: ${error.message}</div>`;
             }
         }
 
         function renderWinners(winners) {
             const container = document.getElementById("winnersContainer");
             container.innerHTML = "";
-            
-            if (winners.length === 0) {
-                container.innerHTML = `<div class="error">Нет данных о победителях</div>`;
-                return;
-            }
             
             winners.forEach(winner => {
                 const winnerEl = document.createElement("div");
