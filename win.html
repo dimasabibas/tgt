@@ -91,8 +91,15 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, "text/html");
                 
-                // Извлекаем название фото из заголовка h1
-                const title = doc.querySelector('h1')?.textContent?.trim() || 'Фотография транспорта';
+                // Извлекаем весь текст страницы
+                const pageText = doc.body.textContent || '';
+                
+                // Находим название перед "— маршрут"
+                let title = 'Фотография транспорта';
+                const titleMatch = pageText.match(/(.+?)\s*—\s*маршрут/i);
+                if (titleMatch && titleMatch[1]) {
+                    title = titleMatch[1].trim();
+                }
                 
                 // Извлекаем автора (ищем текст после "Автор:")
                 const authorLabel = Array.from(doc.querySelectorAll('td'))
