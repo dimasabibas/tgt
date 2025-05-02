@@ -43,6 +43,7 @@
         }
         .winner-author {
             color: #555;
+            margin-bottom: 5px;
         }
         .winner-votes {
             color: #e74c3c;
@@ -79,9 +80,44 @@
     <button class="refresh-btn" id="refreshBtn">Обновить</button>
 
     <script>
-        // Используем прокси для обхода CORS (может потребоваться активация)
+        // Используем прокси для обхода CORS
         const PROXY_URL = "https://api.allorigins.win/raw?url=";
         const TARGET_URL = "https://transphoto.org/voting.php?show=results";
+
+        async function fetchPhotoDetails(photoUrl) {
+            try {
+                const response = await fetch(PROXY_URL + encodeURIComponent(photoUrl));
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+                
+                // Извлекаем название фото из заголовка h1
+                const title = doc.querySelector('h1')?.textContent?.trim() || 'Фотография транспорта';
+                
+                // Извлекаем автора (ищем текст после "Автор:")
+                const authorLabel = Array.from(doc.querySelectorAll('td'))
+                    .find(el => el.textContent.includes('Автор:'));
+                const author = authorLabel?.nextElementSibling?.textContent?.trim() || 'Неизвестен';
+                
+                // Извлекаем количество голосов
+                const votesLabel = Array.from(doc.querySelectorAll('td'))
+                    .find(el => el.textContent.includes('Голосов:'));
+                const votes = votesLabel?.nextElementSibling?.textContent?.trim() || 'N/A';
+                
+                return { 
+                    title: title.replace(/\s+/g, ' ').trim(),
+                    author: author.replace(/\s+/g, ' ').trim(),
+                    votes: votes.replace(/\s+/g, ' ').trim()
+                };
+            } catch (error) {
+                console.error('Ошибка при загрузке деталей фото:', error);
+                return { 
+                    title: 'Фотография транспорта', 
+                    author: 'Неизвестен',
+                    votes: 'N/A'
+                };
+            }
+        }
 
         async function fetchWinners() {
             const container = document.getElementById("winnersContainer");
@@ -91,35 +127,40 @@
                 const response = await fetch(PROXY_URL + encodeURIComponent(TARGET_URL));
                 const html = await response.text();
                 
-                // Парсим HTML с помощью DOMParser
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, "text/html");
                 
-                // Находим все ссылки на фотографии в таблице результатов
+                // Находим все ссылки на фотографии
                 const photoLinks = Array.from(doc.querySelectorAll("a[href^='/photo/']"))
                     .filter(a => a.querySelector('img'))
-                    .slice(0, 3); // Берем первые 3 фото
+                    .slice(0, 3);
                 
                 if (photoLinks.length === 0) {
                     throw new Error("Не найдены фотографии победителей");
                 }
                 
-                const winners = photoLinks.map(link => {
-                    const img = link.querySelector('img');
-                    const row = link.closest('tr');
-                    const votes = row?.querySelector('td:nth-child(3)')?.textContent?.trim() || 'N/A';
-                    const author = row?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Неизвестен';
+                // Загружаем данные по каждой фотографии
+                const winnersPromises = photoLinks.map(async link => {
+                    const photoId = link.getAttribute('href').match(/\/photo\/(\d+)/)[1];
+                    const firstPart = photoId.substring(0, 2);
+                    const secondPart = photoId.substring(2, 4);
+                    const thirdPart = photoId.substring(4, 6);
+                    const imageUrl = `https://transphoto.org/photo/${firstPart}/${secondPart}/${thirdPart}/${photoId}.jpg`;
+                    const photoPageUrl = `https://transphoto.org${link.getAttribute('href')}`;
+                    
+                    // Получаем детали с страницы фото
+                    const details = await fetchPhotoDetails(photoPageUrl);
                     
                     return {
-                        imageUrl: img.src.startsWith('http') ? img.src : `https://transphoto.org${img.src}`,
-                        title: img.alt || 'Фотография транспорта',
-                        author: author,
-                        votes: votes,
-                        link: `https://transphoto.org${link.getAttribute('href')}`
+                        imageUrl: imageUrl,
+                        title: details.title,
+                        author: details.author,
+                        votes: details.votes,
+                        link: photoPageUrl
                     };
                 });
                 
-                // Отрисовываем победителей
+                const winners = await Promise.all(winnersPromises);
                 renderWinners(winners);
             } catch (error) {
                 console.error("Ошибка:", error);
@@ -136,7 +177,7 @@
                 winnerEl.className = "winner";
                 winnerEl.innerHTML = `
                     <a href="${winner.link}" target="_blank">
-                        <img src="${winner.imageUrl}" alt="${winner.title}">
+                        <img src="${winner.imageUrl}" alt="${winner.title}" onerror="this.src='https://transphoto.org/images/nophoto.png'">
                     </a>
                     <div class="winner-info">
                         <div class="winner-title">${winner.title}</div>
