@@ -41,6 +41,13 @@
             font-weight: bold;
             margin-bottom: 5px;
         }
+        .winner-city {
+            color: #2c3e50;
+            font-weight: bold;
+        }
+        .winner-vehicle {
+            color: #2c3e50;
+        }
         .winner-author {
             color: #555;
             margin-bottom: 5px;
@@ -80,7 +87,6 @@
     <button class="refresh-btn" id="refreshBtn">Обновить</button>
 
     <script>
-        // Используем прокси для обхода CORS
         const PROXY_URL = "https://api.allorigins.win/raw?url=";
         const TARGET_URL = "https://transphoto.org/voting.php?show=results";
 
@@ -91,20 +97,25 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, "text/html");
                 
-                // Извлекаем весь текст страницы
-                const pageText = doc.body.textContent || '';
+                // Извлекаем название города и транспорта
+                const titleElement = doc.querySelector('h1');
+                let fullTitle = titleElement?.textContent?.trim() || 'Город не указан, Транспортное средство не указано';
                 
-                // Находим название перед "— маршрут"
-                let title = 'Фотография транспорта';
-                const titleMatch = pageText.match(/(.+?)\s*—\s*маршрут/i);
-                if (titleMatch && titleMatch[1]) {
-                    title = titleMatch[1].trim();
+                // Разделяем город и транспортное средство
+                let [cityName, vehicleName] = fullTitle.split(',').map(s => s.trim());
+                if (!vehicleName) {
+                    vehicleName = 'Транспортное средство не указано';
                 }
                 
-                // Извлекаем автора (ищем текст после "Автор:")
-                const authorLabel = Array.from(doc.querySelectorAll('td'))
-                    .find(el => el.textContent.includes('Автор:'));
-                const author = authorLabel?.nextElementSibling?.textContent?.trim() || 'Неизвестен';
+                // Извлекаем имя автора
+                let authorName = 'Неизвестен';
+                let authorUrl = '#';
+                const authorLink = doc.querySelector('a[href^="/author/"]');
+                if (authorLink) {
+                    authorName = authorLink.textContent.trim();
+                    const authorId = authorLink.getAttribute('href').split('/')[2];
+                    authorUrl = `https://transphoto.org/author/${authorId}/`;
+                }
                 
                 // Извлекаем количество голосов
                 const votesLabel = Array.from(doc.querySelectorAll('td'))
@@ -112,15 +123,19 @@
                 const votes = votesLabel?.nextElementSibling?.textContent?.trim() || 'N/A';
                 
                 return { 
-                    title: title.replace(/\s+/g, ' ').trim(),
-                    author: author.replace(/\s+/g, ' ').trim(),
+                    cityName: cityName || 'Город не указан',
+                    vehicleName: vehicleName,
+                    authorName: authorName,
+                    authorUrl: authorUrl,
                     votes: votes.replace(/\s+/g, ' ').trim()
                 };
             } catch (error) {
                 console.error('Ошибка при загрузке деталей фото:', error);
                 return { 
-                    title: 'Фотография транспорта', 
-                    author: 'Неизвестен',
+                    cityName: 'Город не указан',
+                    vehicleName: 'Транспортное средство не указано',
+                    authorName: 'Неизвестен',
+                    authorUrl: '#',
                     votes: 'N/A'
                 };
             }
@@ -137,7 +152,6 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, "text/html");
                 
-                // Находим все ссылки на фотографии
                 const photoLinks = Array.from(doc.querySelectorAll("a[href^='/photo/']"))
                     .filter(a => a.querySelector('img'))
                     .slice(0, 3);
@@ -146,7 +160,6 @@
                     throw new Error("Не найдены фотографии победителей");
                 }
                 
-                // Загружаем данные по каждой фотографии
                 const winnersPromises = photoLinks.map(async link => {
                     const photoId = link.getAttribute('href').match(/\/photo\/(\d+)/)[1];
                     const firstPart = photoId.substring(0, 2);
@@ -155,13 +168,14 @@
                     const imageUrl = `https://transphoto.org/photo/${firstPart}/${secondPart}/${thirdPart}/${photoId}.jpg`;
                     const photoPageUrl = `https://transphoto.org${link.getAttribute('href')}`;
                     
-                    // Получаем детали с страницы фото
                     const details = await fetchPhotoDetails(photoPageUrl);
                     
                     return {
                         imageUrl: imageUrl,
-                        title: details.title,
-                        author: details.author,
+                        cityName: details.cityName,
+                        vehicleName: details.vehicleName,
+                        authorName: details.authorName,
+                        authorUrl: details.authorUrl,
                         votes: details.votes,
                         link: photoPageUrl
                     };
@@ -184,11 +198,16 @@
                 winnerEl.className = "winner";
                 winnerEl.innerHTML = `
                     <a href="${winner.link}" target="_blank">
-                        <img src="${winner.imageUrl}" alt="${winner.title}" onerror="this.src='https://transphoto.org/images/nophoto.png'">
+                        <img src="${winner.imageUrl}" alt="${winner.cityName}, ${winner.vehicleName}" onerror="this.src='https://transphoto.org/images/nophoto.png'">
                     </a>
                     <div class="winner-info">
-                        <div class="winner-title">${winner.title}</div>
-                        <div class="winner-author">Автор: ${winner.author}</div>
+                        <div class="winner-title">
+                            <span class="winner-city">${winner.cityName}</span>, 
+                            <span class="winner-vehicle">${winner.vehicleName}</span>
+                        </div>
+                        <div class="winner-author">
+                            Автор: <a href="${winner.authorUrl}" target="_blank">${winner.authorName}</a>
+                        </div>
                         <div class="winner-votes">Голосов: ${winner.votes}</div>
                     </div>
                 `;
@@ -196,10 +215,7 @@
             });
         }
 
-        // Загружаем данные при старте
         document.addEventListener("DOMContentLoaded", fetchWinners);
-        
-        // Обновляем по кнопке
         document.getElementById("refreshBtn").addEventListener("click", fetchWinners);
     </script>
 </body>
