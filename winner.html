@@ -79,8 +79,8 @@
     <button class="refresh-btn" id="refreshBtn">Обновить</button>
 
     <script>
-        // Альтернативный прокси-сервер
-        const PROXY_URL = "https://corsproxy.io/?"; 
+        // Используем прокси для обхода CORS (может потребоваться активация)
+        const PROXY_URL = "https://api.allorigins.win/raw?url=";
         const TARGET_URL = "https://transphoto.org/voting.php?show=results";
 
         async function fetchWinners() {
@@ -88,51 +88,50 @@
             container.innerHTML = '<div class="loading">Загрузка данных...</div>';
             
             try {
-                // Загружаем страницу через прокси
                 const response = await fetch(PROXY_URL + encodeURIComponent(TARGET_URL));
                 const html = await response.text();
                 
-                // Создаем временный элемент для парсинга
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = html;
+                // Парсим HTML с помощью DOMParser
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
                 
-                // Находим все миниатюры фотографий
-                const thumbnails = tempDiv.querySelectorAll('a[href^="/photo/"] img[src^="/photos/"]');
-                const winners = [];
+                // Находим все ссылки на фотографии в таблице результатов
+                const photoLinks = Array.from(doc.querySelectorAll("a[href^='/photo/']"))
+                    .filter(a => a.querySelector('img'))
+                    .slice(0, 3); // Берем первые 3 фото
                 
-                // Обрабатываем первые 3 фото
-                for (let i = 0; i < Math.min(3, thumbnails.length); i++) {
-                    const img = thumbnails[i];
-                    const link = img.closest('a');
-                    const row = img.closest('tr');
-                    
-                    // Получаем ID фото из ссылки
-                    const photoId = link.getAttribute('href').split('/')[2];
-                    
-                    // Формируем URL полноразмерного изображения
-                    const imgUrl = `https://transphoto.org/photo/${photoId.substring(0,2)}/${photoId.substring(2,4)}/${photoId.substring(4,6)}/${photoId}.jpg`;
-                    
-                    // Получаем дополнительные данные
-                    const author = row?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Неизвестен';
+                if (photoLinks.length === 0) {
+                    throw new Error("Не найдены фотографии победителей");
+                }
+                
+                const winners = photoLinks.map(link => {
+                    const img = link.querySelector('img');
+                    const row = link.closest('tr');
                     const votes = row?.querySelector('td:nth-child(3)')?.textContent?.trim() || 'N/A';
+                    const author = row?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Неизвестен';
                     
-                    winners.push({
-                        imageUrl: imgUrl,
+                    // Извлекаем ID фото из ссылки
+                    const photoId = link.getAttribute('href').match(/\/photo\/(\d+)/)[1];
+                    // Формируем URL изображения по шаблону
+                    const firstPart = photoId.substring(0, 2);
+                    const secondPart = photoId.substring(2, 4);
+                    const thirdPart = photoId.substring(4, 6);
+                    const imageUrl = `https://transphoto.org/photo/${firstPart}/${secondPart}/${thirdPart}/${photoId}.jpg`;
+                    
+                    return {
+                        imageUrl: imageUrl,
                         title: img.alt || 'Фотография транспорта',
                         author: author,
                         votes: votes,
                         link: `https://transphoto.org${link.getAttribute('href')}`
-                    });
-                }
+                    };
+                });
                 
-                if (winners.length === 0) {
-                    throw new Error("Не найдены фотографии победителей");
-                }
-                
+                // Отрисовываем победителей
                 renderWinners(winners);
             } catch (error) {
                 console.error("Ошибка:", error);
-                container.innerHTML = `<div class="error">Ошибка загрузки данных. Попробуйте обновить страницу или зайти позже.</div>`;
+                container.innerHTML = `<div class="error">Ошибка загрузки данных: ${error.message}</div>`;
             }
         }
 
@@ -145,8 +144,7 @@
                 winnerEl.className = "winner";
                 winnerEl.innerHTML = `
                     <a href="${winner.link}" target="_blank">
-                        <img src="${winner.imageUrl}" alt="${winner.title}" 
-                             onerror="this.onerror=null;this.src='https://via.placeholder.com/300x200?text=Фото+не+доступно'">
+                        <img src="${winner.imageUrl}" alt="${winner.title}" onerror="this.src='https://transphoto.org/images/nophoto.png'">
                     </a>
                     <div class="winner-info">
                         <div class="winner-title">${winner.title}</div>
