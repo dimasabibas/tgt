@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Победители конкурса TransPhoto</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        .winners {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+        }
+        .winner {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 300px;
+        }
+        .winner img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        .winner-info {
+            padding: 15px;
+        }
+        .winner-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .winner-author {
+            color: #555;
+        }
+        .winner-votes {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .refresh-btn {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+        }
+        .error {
+            color: #e74c3c;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Последние победители конкурса TransPhoto</h1>
+    
+    <div class="winners" id="winnersContainer">
+        <div class="loading">Загрузка данных...</div>
+    </div>
+    
+    <button class="refresh-btn" id="refreshBtn">Обновить</button>
+
+    <script>
+        // Используем прокси для обхода CORS
+        const PROXY_URL = "https://api.allorigins.win/raw?url=";
+        const TARGET_URL = "https://transphoto.org/voting.php?show=results";
+
+        async function fetchWinners() {
+            const container = document.getElementById("winnersContainer");
+            container.innerHTML = '<div class="loading">Загрузка данных...</div>';
+            
+            try {
+                const response = await fetch(PROXY_URL + encodeURIComponent(TARGET_URL));
+                const html = await response.text();
+                
+                // Парсим HTML
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+                
+                // Ищем все строки таблицы с результатами
+                const rows = Array.from(doc.querySelectorAll(".voting_results tr")).slice(1, 4); // Берем первые 3 после заголовка
+                
+                const winners = rows.map(row => {
+                    // Извлекаем ID фото из ссылки
+                    const photoLink = row.querySelector("a[href^='/photo/']");
+                    if (!photoLink) return null;
+                    
+                    const photoId = photoLink.getAttribute("href").split('/')[2];
+                    // Формируем URL изображения по шаблону
+                    const imgPath = `${photoId.substring(0,2)}/${photoId.substring(2,4)}/${photoId.substring(4,6)}/${photoId}.jpg`;
+                    const imgUrl = `https://transphoto.org/photo/${imgPath}`;
+                    
+                    // Получаем остальные данные
+                    const author = row.querySelector("td:nth-child(2)")?.textContent.trim() || "Неизвестен";
+                    const votes = row.querySelector("td:nth-child(3)")?.textContent.trim() || "N/A";
+                    const title = photoLink.querySelector("img")?.alt || "Фотография транспорта";
+                    
+                    return {
+                        imageUrl: imgUrl,
+                        title: title,
+                        author: author,
+                        votes: votes,
+                        link: `https://transphoto.org${photoLink.getAttribute("href")}`
+                    };
+                }).filter(Boolean); // Удаляем null
+                
+                if (winners.length === 0) {
+                    throw new Error("Не найдены фотографии победителей");
+                }
+                
+                renderWinners(winners);
+            } catch (error) {
+                console.error("Ошибка:", error);
+                container.innerHTML = `<div class="error">Ошибка загрузки данных: ${error.message}</div>`;
+            }
+        }
+
+        function renderWinners(winners) {
+            const container = document.getElementById("winnersContainer");
+            container.innerHTML = "";
+            
+            winners.forEach(winner => {
+                const winnerEl = document.createElement("div");
+                winnerEl.className = "winner";
+                winnerEl.innerHTML = `
+                    <a href="${winner.link}" target="_blank">
+                        <img src="${winner.imageUrl}" alt="${winner.title}" onerror="this.src='https://via.placeholder.com/300x200?text=Фото+не+загружено'">
+                    </a>
+                    <div class="winner-info">
+                        <div class="winner-title">${winner.title}</div>
+                        <div class="winner-author">Автор: ${winner.author}</div>
+                        <div class="winner-votes">Голосов: ${winner.votes}</div>
+                    </div>
+                `;
+                container.appendChild(winnerEl);
+            });
+        }
+
+        // Загружаем данные при старте
+        document.addEventListener("DOMContentLoaded", fetchWinners);
+        
+        // Обновляем по кнопке
+        document.getElementById("refreshBtn").addEventListener("click", fetchWinners);
+    </script>
+</body>
+</html>
