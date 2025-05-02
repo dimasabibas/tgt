@@ -90,6 +90,19 @@
         const PROXY_URL = "https://api.allorigins.win/raw?url=";
         const TARGET_URL = "https://transphoto.org/voting.php?show=results";
 
+        async function fetchCityName(cityUrl) {
+            try {
+                const response = await fetch(PROXY_URL + encodeURIComponent(cityUrl));
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+                return doc.querySelector('h1')?.textContent?.trim() || 'Город не указан';
+            } catch (error) {
+                console.error('Ошибка при загрузке города:', error);
+                return 'Город не указан';
+            }
+        }
+
         async function fetchPhotoDetails(photoUrl) {
             try {
                 const response = await fetch(PROXY_URL + encodeURIComponent(photoUrl));
@@ -97,14 +110,16 @@
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, "text/html");
                 
-                // Извлекаем название города и транспорта
-                const titleElement = doc.querySelector('h1');
-                let fullTitle = titleElement?.textContent?.trim() || 'Город не указан, Транспортное средство не указано';
+                // Извлекаем название транспорта
+                const vehicleElement = doc.querySelector('h1');
+                let vehicle = vehicleElement?.textContent?.trim() || 'Транспортное средство не указано';
                 
-                // Разделяем город и транспортное средство
-                let [cityName, vehicleName] = fullTitle.split(',').map(s => s.trim());
-                if (!vehicleName) {
-                    vehicleName = 'Транспортное средство не указано';
+                // Извлекаем ссылку на город
+                const cityLink = doc.querySelector('a[href^="/city/"]');
+                let cityName = 'Город не указан';
+                if (cityLink) {
+                    const cityUrl = `https://transphoto.org${cityLink.getAttribute('href')}`;
+                    cityName = await fetchCityName(cityUrl);
                 }
                 
                 // Извлекаем имя автора
@@ -123,8 +138,8 @@
                 const votes = votesLabel?.nextElementSibling?.textContent?.trim() || 'N/A';
                 
                 return { 
-                    cityName: cityName || 'Город не указан',
-                    vehicleName: vehicleName,
+                    cityName: cityName.replace(/\s+/g, ' ').trim(),
+                    vehicleName: vehicle.replace(/\s+/g, ' ').trim(),
                     authorName: authorName,
                     authorUrl: authorUrl,
                     votes: votes.replace(/\s+/g, ' ').trim()
