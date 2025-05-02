@@ -132,11 +132,7 @@
                     authorUrl = `https://transphoto.org/author/${authorId}/`;
                 }
                 
-                // Извлекаем количество голосов
-                const votesLabel = Array.from(doc.querySelectorAll('td'))
-                    .find(el => el.textContent.includes('Голосов:'));
-                const votes = votesLabel?.nextElementSibling?.textContent?.trim() || 'N/A';
-                
+                         
                 return { 
                     cityName: cityName.replace(/\s+/g, ' ').trim(),
                     vehicleName: vehicle.replace(/\s+/g, ' ').trim(),
