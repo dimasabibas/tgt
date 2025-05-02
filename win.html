@@ -187,7 +187,6 @@
                         vehicleName: details.vehicleName,
                         authorName: details.authorName,
                         authorUrl: details.authorUrl,
-                        votes: details.votes,
                         link: photoPageUrl
                     };
                 });
@@ -219,8 +218,7 @@
                         <div class="winner-author">
                             Автор: <a href="${winner.authorUrl}" target="_blank">${winner.authorName}</a>
                         </div>
-                        <div class="winner-votes">Голосов: ${winner.votes}</div>
-                    </div>
+                                           </div>
                 `;
                 container.appendChild(winnerEl);
             });
